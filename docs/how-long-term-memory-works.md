@@ -427,6 +427,86 @@ LLM call, no cost. That's a deliberate mem0 optimisation.
 
 Bigger models are better at reconciliation, and a lot slower on a laptop.
 
+### In mem0: is reconciliation built in, and can I customise it?
+
+**Yes, it's built in.** With the mem0 library you never call extraction or reconciliation
+yourself. A single call does both:
+
+```python
+memory.add(messages, user_id="demo_user")
+```
+
+Inside, mem0 runs exactly the steps this tab shows (`Memory._add_to_vector_store` in
+`mem0/memory/main.py`): one extraction call, then for each fact a search for the 5 most similar
+memories, the short-id swap, one reconciliation call, and applying the decisions. What `add()`
+returns is just the outcome, e.g. `[{"event": "ADD", "memory": "Name is Alex"}]`. The in-between
+steps (candidate facts, which memories were compared, the short ids, the raw reply) are hidden.
+That's why this app has its own engine that shows them.
+
+If you don't want the LLM deciding anything, turn both steps off:
+
+```python
+memory.add(messages, user_id="demo_user", infer=False)
+```
+
+Then every message is saved word for word as its own memory. There's no extraction, no
+reconciliation and no LLM call.
+
+**What you can customise through mem0's config** (version 0.1.113):
+
+| Config key | What it changes |
+|---|---|
+| `"llm"` | The model that runs extraction and reconciliation. A stronger model here is the biggest improvement, as the 3b vs 7b results above show. |
+| `"custom_fact_extraction_prompt"` | Replaces the extraction prompt completely. The conversation is still sent as `Input:\n...`, and your prompt must still make the model return `{"facts": [...]}`. |
+| `"custom_update_memory_prompt"` | Replaces the instructions-and-examples part of the reconciliation prompt. |
+
+```python
+config = {
+    "llm": {...},
+    "embedder": {...},
+    "vector_store": {...},
+    "custom_fact_extraction_prompt": (
+        "Only extract facts the USER states about themselves. "
+        "Ignore anything the assistant claims. ..."
+    ),
+    "custom_update_memory_prompt": (
+        "You are a memory manager... If a new fact contradicts an old one, "
+        "DELETE the old one..."
+    ),
+}
+memory = Memory.from_config(config)
+```
+
+Those two prompts are where you'd fix the problems this guide shows:
+
+- *"Only trust the user's messages"* targets the San Francisco trap.
+- *"Prefer DELETE when facts contradict"* targets "Hiking in Marin County" alongside
+  "Given up hiking".
+
+**What is fixed in mem0's code** and can't be changed through config:
+
+- Only the instructions part of the reconciliation prompt is replaced. mem0 always adds its own
+  wrapper after it, which demands the reply format
+  `{"memory": [{"id", "text", "event", "old_memory"}]}`. So the four decisions (ADD / UPDATE /
+  DELETE / NONE) and that JSON format stay the same.
+- The number of similar memories compared per fact is always 5 (`limit=5` in the code).
+- The short-id swap always happens, and reconciliation is always skipped when extraction finds no
+  facts.
+
+**Manual control.** You can also manage memories yourself, outside the automatic pipeline:
+
+```python
+memory.update(memory_id, "Lives in Portland, Oregon")   # rewrite one memory
+memory.delete(memory_id)                                # remove one memory
+memory.delete_all(user_id="demo_user")                  # remove everything for a user
+memory.history(memory_id)                               # every change made to one memory
+memory.add(messages, user_id="demo_user", metadata={"source": "support_chat"})  # attach your own data
+```
+
+If you need something deeper, such as a different number of candidates, new kinds of decisions, or
+a human review before any DELETE, you'd subclass `Memory` or write your own loop.
+`memory_lab/pipeline.py` in this app is about 150 lines and a good starting point.
+
 ---
 
 ## 7. Tab ④: Retrieval
@@ -520,6 +600,57 @@ empty, which is the honest answer.
 *"Learning to play guitar"*. The word "hobby" never appears in those memories, and the small
 embedding model doesn't connect "hiking" with "hobby" strongly. Retrieval by meaning is powerful,
 not perfect.
+
+### In mem0: who does the comparing, and is there a vector database?
+
+**You only choose the embedding model; mem0 does the rest.** With the library, retrieval is one
+call:
+
+```python
+memory.search("What are my favorite books?", user_id="demo_user", limit=2)
+```
+
+Inside (`Memory._search_vector_store` in `mem0/memory/main.py`) it does two things:
+
+```python
+embeddings = self.embedding_model.embed(query, "search")            # 1. turn the question into numbers
+memories = self.vector_store.search(query=query, vectors=embeddings,
+                                    limit=limit, filters=filters)    # 2. find the closest memories
+```
+
+**And yes, there's always a vector database.** mem0 doesn't compute similarities itself. It hands
+that job to a **vector database**: a database built to store embeddings and quickly find the
+nearest ones, even among millions. When a memory is added, its embedding is saved there. When you
+search, the database finds the closest matches. Your `user_id` is passed along as a filter, so each
+user only ever sees their own memories.
+
+You pick the database in the config, just like the model and the embedder:
+
+```python
+config = {
+    "embedder": {"provider": "huggingface",
+                 "config": {"model": "sentence-transformers/all-MiniLM-L6-v2"}},
+    "vector_store": {"provider": "chroma",
+                     "config": {"collection_name": "my_memories", "path": "./chroma_db"}},
+    ...
+}
+```
+
+- **The book's example uses Chroma**, saved as files in a temporary folder.
+- **If you leave out `vector_store`, mem0 uses Qdrant.**
+- Version 0.1.113 also supports FAISS, pgvector (Postgres), Pinecone, Milvus, Weaviate, Redis,
+  Elasticsearch, OpenSearch, MongoDB, Supabase, Azure AI Search and more. You switch by changing
+  `"provider"`.
+
+> **Catch:** each database reports scores in its own way, and mem0 passes the number through
+> unchanged. Chroma's default is a **distance** (lower = closer); others return a **similarity**
+> (higher = closer). Check which one you're getting before you use `threshold`. See the gotcha in
+> section 10.
+
+**In this app**, the vector database is replaced by something you can read: each user's JSON file
+holds the memories and their embeddings, and `memory_lab/store.py` compares them with a single
+numpy dot product (cosine similarity, because the vectors have length 1). It does the same job as a
+vector database, fine for a few hundred memories but not for millions.
 
 ---
 
