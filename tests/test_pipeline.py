@@ -100,3 +100,14 @@ def test_memory_turn_includes_chat_history(emb):
     t = pipeline.memory_turn(llm, emb, MemoryStore("u"), "What's my name?", history=hist, write_back=False)
     assert [m["role"] for m in t.answer.messages] == ["system", "user", "assistant", "user"]
     assert t.write is None
+
+
+def test_memory_turn_prompt_styles(emb):
+    s = MemoryStore("u")
+    s.add("Lives in Taiwan", emb.embed(["Lives in Taiwan"])[0])
+    book = pipeline.memory_turn(FakeLLM("ok"), emb, s, "Where do I live?", write_back=False)
+    assert "memories from previous conversations" in book.answer.messages[0]["content"]
+    improved = pipeline.memory_turn(FakeLLM("ok"), emb, s, "Where do I live?", write_back=False,
+                                    prompt_style="improved")
+    content = improved.answer.messages[0]["content"]
+    assert "about the user you are talking to" in content and "Lives in Taiwan (saved " in content

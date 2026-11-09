@@ -214,12 +214,22 @@ class TurnResult:
     write: AddResult | None
 
 
+PROMPT_STYLES = ("book", "improved")
+
+
+def build_answer_prompt(hits: list[Hit], style: str = "book") -> str:
+    """The memory-augmented system prompt: the book's wording, or the clearer "improved" one."""
+    if style == "improved":
+        return prompts.improved_answer_system_prompt([(h.item.text, h.item.updated_at) for h in hits])
+    return prompts.answer_system_prompt([h.item.text for h in hits])
+
+
 def memory_turn(llm: LLM, embedder: Embedder, store: MemoryStore, query: str, *, limit: int = 3,
                 history: list[dict] | None = None, write_back: bool = True,
-                source: str = "") -> TurnResult:
+                source: str = "", prompt_style: str = "book") -> TurnResult:
     """One full turn, as in the book's chat loop: retrieve, answer, then save the turn to memory."""
     ret = retrieve(embedder, store, query, limit)
-    system_prompt = prompts.answer_system_prompt([h.item.text for h in ret.selected])
+    system_prompt = build_answer_prompt(ret.selected, prompt_style)
     ans = answer(llm, query, system_prompt, history)
     write = None
     if write_back:

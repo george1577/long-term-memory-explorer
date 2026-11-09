@@ -89,6 +89,36 @@ def store_table(store: MemoryStore) -> pd.DataFrame:
     )
 
 
+PROMPT_LABELS = {
+    "book": "Book's prompt (word for word from the example)",
+    "improved": "Improved prompt (facts about *this* user, with dates)",
+}
+PROMPT_HELP = ("The book's prompt doesn't say the memories are about the person you're talking to, so small models "
+               "often hedge (\"I don't have information about where you live\"). The improved prompt says so, adds "
+               "when each memory was saved, and asks the model to trust the newest when two conflict. That rule is "
+               "unreliable with qwen2.5:3b: if the store holds a contradiction, delete the wrong memory. The improved "
+               "prompt is this app's addition, not from the book or mem0.")
+
+
+def store_view_with_delete(store: MemoryStore, key: str, columns: list[str], height: int | None = None) -> None:
+    """The store as a table where you can tick rows and delete them, like ChatGPT's "Manage memories"."""
+    gen = st.session_state.get(f"{key}_gen", 0)  # new table key after a delete clears the old selection
+    kwargs = {"height": height} if height else {}
+    event = st.dataframe(store_table(store)[columns], hide_index=True, width="stretch", on_select="rerun",
+                         selection_mode="multi-row", key=f"{key}_table_{gen}", **kwargs)
+    rows = [i for i in event.selection.rows if i < len(store.memories)]
+    c1, c2 = st.columns([1, 3])
+    if c1.button(f"🗑️ Delete {len(rows)} selected" if rows else "🗑️ Delete selected", key=f"{key}_del_{gen}",
+                 disabled=not rows):
+        for memory_id in [store.memories[i].id for i in rows]:
+            store.delete(memory_id, source="Manual delete")
+        save_store()
+        st.session_state[f"{key}_gen"] = gen + 1
+        st.rerun()
+    c2.caption("Tick the box at the start of a row to select a memory, then delete it. Deletions are saved and "
+               "recorded in the history log as *Manual delete*.")
+
+
 def history_table(store: MemoryStore) -> pd.DataFrame:
     rows = [{"when": h.time.replace("T", " ")[:19], "event": EVENT_ICON.get(h.event, h.event),
              "before": h.old_text or "", "after": h.new_text or "", "caused by": h.source, "id": h.memory_id[:8]}
@@ -333,7 +363,7 @@ with tabs[2]:
                 "These changes are **saved** to the current user's store.")
     store = get_store()
     with st.expander(f"Current memory store for `{store.user_id}` ({len(store.memories)} memories)", expanded=True):
-        st.dataframe(store_table(store), hide_index=True, width="stretch")
+        store_view_with_delete(store, "t3_store", ["memory", "id", "updated"])
     preset = st.radio("Try a preset", list(PRESETS), horizontal=True, key="t3_preset")
     msg = st.text_area("Something the user says (treated as a one-message conversation)", PRESETS[preset],
                        key=f"t3_msg_{preset}", height=80)
@@ -432,11 +462,14 @@ with tabs[4]:
     query = c1.text_input("Your question", key="t5_custom") if q_choice == "(write your own)" else q_choice
     limit = c2.slider("limit", 1, 10, 3, key="t5_limit")
     write_back = c3.checkbox("Write the turn back to memory", value=True, key="t5_write")
+    t5_style = st.radio("Answer prompt", list(PROMPT_LABELS), format_func=PROMPT_LABELS.get, horizontal=True,
+                        key="t5_style", help=PROMPT_HELP)
     if st.button("Run one turn", type="primary", key="t5_go", disabled=not query):
         store = get_store()
         with st.spinner("Retrieving, answering" + (", then writing back..." if write_back else "...")):
             st.session_state.t5 = run_llm(pipeline.memory_turn, get_llm(), get_embedder(), store, query,
-                                          limit=limit, write_back=write_back, source="Tab ⑤")
+                                          limit=limit, write_back=write_back, source="Tab ⑤",
+                                          prompt_style=t5_style)
         save_store()
     if "t5" in st.session_state:
         t = st.session_state.t5
@@ -476,6 +509,8 @@ with tabs[5]:
                                    help="Include earlier messages of this chat in the prompt (short-term memory). "
                                         "The book's example doesn't; turn it off to match it exactly.")
         chat_limit = b3.number_input("limit", 1, 10, 3, key="t6_limit")
+        t6_style = st.radio("Answer prompt", list(PROMPT_LABELS), format_func=PROMPT_LABELS.get, horizontal=True,
+                            key="t6_style", help=PROMPT_HELP)
         chat_box = st.container(height=480)
         with chat_box:
             for turn in st.session_state.get("chat", []):
@@ -486,6 +521,9 @@ with tabs[5]:
                         with st.expander("What memory did this turn use and change?"):
                             st.markdown("**Retrieved:** " + ("; ".join(f"{t} ({s:.2f})" for t, s in d["retrieved"])
                                                              or "nothing"))
+                            if d.get("system_prompt"):
+                                st.markdown("**System prompt sent to the model:**")
+                                st.code(d["system_prompt"], language="text", wrap_lines=True)
                             st.markdown("**Facts extracted from this turn:** " + ("; ".join(d["facts"]) or "none"))
                             if d["decisions"]:
                                 st.dataframe(pd.DataFrame(d["decisions"]), hide_index=True, width="stretch")
@@ -494,11 +532,12 @@ with tabs[5]:
             history = [{"role": t["role"], "content": t["content"]} for t in st.session_state.chat] if send_history else []
             with st.spinner("Thinking, then updating memory..."):
                 t = run_llm(pipeline.memory_turn, get_llm(), get_embedder(), store, user_msg, limit=int(chat_limit),
-                            history=history, source="Chat")
+                            history=history, source="Chat", prompt_style=t6_style)
             save_store()
             st.session_state.chat.append({"role": "user", "content": user_msg})
             st.session_state.chat.append({"role": "assistant", "content": t.answer.reply.text, "details": {
                 "retrieved": [(h.item.text, h.score) for h in t.retrieval.selected],
+                "system_prompt": t.answer.messages[0]["content"],
                 "facts": t.write.extraction.facts if t.write else [],
                 "decisions": [{"decision": EVENT_ICON.get(d.event, d.event), "text": d.text,
                                "applied": d.applied} for d in (t.write.reconciliation.decisions if t.write else [])],
@@ -506,7 +545,7 @@ with tabs[5]:
             st.rerun()
     with right:
         st.markdown(f"**Memory store for `{store.user_id}`** ({len(store.memories)} memories)")
-        st.dataframe(store_table(store)[["memory"]], hide_index=True, width="stretch", height=300)
+        store_view_with_delete(store, "t6_store", ["memory", "updated"], height=300)
         st.markdown("**Recent changes**")
         st.dataframe(history_table(store)[["event", "before", "after", "caused by"]].head(10), hide_index=True,
                      width="stretch")

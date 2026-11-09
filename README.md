@@ -102,6 +102,8 @@ hobbies, repeat something known, share something new, small talk).
 5. Decisions are applied and **saved**. Ids the model invented are skipped, not applied.
 
 You see each step's table, the decisions, the store before and after, and a full history log.
+The store table at the top has **🗑️ Delete selected**: tick memories and delete them by hand (logged
+as *Manual delete*).
 An expander lets you **rebuild the demo store** from the five conversations, showing each step.
 
 ### ④ Retrieval
@@ -123,13 +125,20 @@ notebook questions at once.
 (shown in full) → answer (temperature 0.7, max 500 tokens, as in the book) → optionally write the
 question and answer back through extraction and reconciliation.
 
+**Answer prompt** option: the book's prompt (default), or an *improved* prompt that is this app's
+addition. It says the memories are about the user, shows when each was saved, and asks the model to
+trust the newest when two conflict. With `qwen2.5:3b` the book's prompt often makes the model hedge;
+section 9 of the guide has the measured comparison.
+
 ### ⑥ Chat
 
 **Shows:** short-term (conversation history) vs long-term (memory store) memory.
 
 **What happens:** each message runs the full loop. The store and its recent changes update live
 beside the chat. **Start a new conversation** wipes the chat but keeps the memories. Options: send
-chat history or not (the book doesn't), and how many memories to retrieve.
+chat history or not (the book doesn't), how many memories to retrieve, and which answer prompt to
+use. The store table has **🗑️ Delete selected**, and each reply's expander shows the exact system
+prompt sent.
 
 ### ⑦ Real mem0
 

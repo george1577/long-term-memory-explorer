@@ -674,7 +674,8 @@ flowchart LR
 ### What you do
 
 Pick a question (default: *What are my favorite books?*), set the limit (default 3, like the book's
-chat loop), choose whether to **write the turn back**, and click **Run one turn**.
+chat loop), choose whether to **write the turn back**, pick an **answer prompt** (see below), and
+click **Run one turn**.
 
 ### What happens and what you see (real output)
 
@@ -698,6 +699,32 @@ information, incorporate it naturally into your response.
 That's the whole trick of long-term memory: **memories are just text pasted into the prompt.**
 The model isn't changed in any way.
 
+**Two answer prompts to choose from.** The **Answer prompt** option (in tabs ⑤ and ⑥) switches
+between:
+
+- **Book's prompt**: the text above, word for word from the book's example. This is the default.
+- **Improved prompt**: this app's own addition, not from the book or mem0. It changes three things:
+
+  ```
+  You are a helpful AI assistant. These are facts you remember about the user you are talking to,
+  from previous conversations (oldest first):
+
+  - Hiking in Marin County (saved 2026-11-09 02:58)
+  - Lives in Taiwan (saved 2026-11-09 04:56)
+
+  Treat them as true facts about this user. If two facts conflict, trust the most recently saved
+  one. Use them to give personalized answers, and ignore any that are not relevant to the question.
+  ```
+
+  1. It says the memories are facts **about the user you're talking to**. The book's prompt only
+     says "memories from previous conversations", and small models sometimes read them as facts
+     about *someone*, not necessarily the user.
+  2. It shows **when each memory was saved**, oldest first, with the time as well as the date.
+     Memories saved on the same day would otherwise look equally new.
+  3. It gives a rule for **conflicts**: trust the most recent.
+
+Section 9 shows a real case where this matters, and how well it works.
+
 **Step 3, Answer:**
 > *"Based on the information you provided, it sounds like your favorite author is Isaac Asimov, and
 > you particularly enjoy his works in the Foundation series…"*
@@ -710,8 +737,9 @@ Isaac Asimov"* and *"Enjoys the Foundation series by Isaac Asimov"*, and reconci
 > **A subtle risk in write-back:** the conversation sent to extraction includes the *assistant's*
 > answer. If the assistant says something wrong ("You live in San Francisco"), extraction may save
 > it as a fact about the user. This is exactly conversation 3's trap, and it can make mistakes
-> reinforce themselves over time. Untick **Write the turn back** to answer without changing the
-> store.
+> reinforce themselves over time. Section 9 has a real example: a wrong answer ("You live in
+> Portland") was saved back as a second copy of the wrong memory. Untick **Write the turn back** to
+> answer without changing the store.
 
 ---
 
@@ -744,9 +772,80 @@ extracted, and the decisions.
   to see the example's exact behaviour, where the model can't even remember your previous message
   unless it was saved as a memory.
 - **limit**: how many memories to retrieve per turn.
+- **Answer prompt**: the book's prompt or the improved one (section 8).
+- **🗑️ Delete selected**: tick one or more memories in the store table on the right, then delete
+  them. This is your manual override, like ChatGPT's "Manage memories" screen. The same table with
+  delete is at the top of tab ③. Deletions are saved and appear in the history log as
+  *Manual delete*.
 - **User id** (sidebar): switch to another id, such as `alice`, and you get an empty store. Memories
   are kept **separate per user**, which is what the book's `user_id=` argument does. Switch back to
   `demo_user` and everything is still there.
+
+### A real case: "I live in Taiwan", but the model says it doesn't know
+
+This happened while testing the app. Retracing it shows several of this guide's lessons at once.
+
+**What was done:**
+
+1. Earlier, in tab ③, the *Correct the location trap* preset saved **"Lives in Portland, Oregon"**.
+2. In the chat: *"I live in Taiwan."* The store gained **"Lives in Taiwan"**. ✅
+3. **Start a new conversation**, then: *"where do i live"*.
+4. The model answered that it didn't have specific information about where you live. ❌ But the
+   expander showed that retrieval **had** found "Lives in Taiwan".
+
+**What went wrong: two separate failures.**
+
+**Failure 1, write path: the store now said two different things.** When "Lives in Taiwan" came
+in, reconciliation **was shown** "Lives in Portland, Oregon" as the most similar existing memory
+(score 0.45). It should have deleted or updated it. It chose **ADD** (we replayed this twice:
+ADD both times). This is the weakness from tab ③: `qwen2.5:3b` adds almost everything. So for
+"where do i live", retrieval correctly returned **both**, and Portland ranked first:
+
+```
+0.364  Lives in Portland, Oregon
+0.319  Lives in Taiwan
+0.170  Hiking in Marin County
+```
+
+**Failure 2, read path: the book's prompt left the model unsure.** The model received the book's
+prompt with those three lines. It doesn't say they're facts about *this* user or which is newer.
+Given two conflicting places, the model hedged in all 3 tries. Once it even said *"some of the
+people I've interacted with have lived in Portland, Oregon and in Taiwan"*.
+
+**A bonus failure: write-back made it worse.** In one test, the model answered "You live in
+Portland, Oregon". Write-back then extracted *"Lives in Portland, Oregon"* from that answer and
+reconciliation ADDed it, an **exact duplicate** of the existing memory. The wrong fact now had two
+copies, which makes it even more likely to be retrieved. This is the self-reinforcing risk from
+section 8, happening for real.
+
+**What fixes it.** These are real counts from asking "where do i live" 6 times each, with
+`qwen2.5:3b`:
+
+| Store | Answer prompt | Answered "Taiwan" |
+|---|---|---|
+| Portland **and** Taiwan | Improved (oldest first, timestamps) | 2 / 6 |
+| Portland **and** Taiwan | Improved, but newest first | 0 / 6 |
+| Portland **deleted** | Book's | 2 / 6 |
+| Portland **deleted** | **Improved** | **6 / 6** ✅ |
+
+What the table shows:
+
+- **A prompt can't reliably fix a contradiction in the store.** Even when told "trust the most
+  recently saved one", and whichever way the list was ordered, the 3B model mostly picked
+  Portland. Small models struggle to apply rules like this.
+- **The book's prompt hedges even without a contradiction** (2 out of 6), because it never says
+  the memories are about the user.
+- **Cleaning the store *and* using the clearer prompt** worked every time.
+
+**What to do in the app:** select *Lives in Portland, Oregon* (and any duplicate) in the store
+table, click **🗑️ Delete selected**, and set **Answer prompt** to *Improved*.
+
+**What a real system would do:**
+
+- Use a stronger model for reconciliation, so the contradiction never gets in. The section 6
+  results show `qwen2.5:7b` replacing an old memory where 3b didn't.
+- Give users a way to see and delete memories.
+- Tell the model plainly in the prompt that the memories are about the user.
 
 ---
 
@@ -850,7 +949,10 @@ conversations too, as a backup to re-extract from later.
 
 **Contradictions and duplicates pile up** when reconciliation is weak (tab ③: "Hiking in Marin
 County" alongside "Given up hiking"; "Favorite" and "Favourite" author). Over time the store gets
-noisy and retrieval gets worse. Stronger models help; some systems also run a periodic clean-up job.
+noisy and retrieval gets worse. Section 9's "I live in Taiwan" case shows where this ends up: the
+store said both Portland and Taiwan, and no answer prompt could reliably pick the right one.
+Stronger models help; so does a way for users to delete memories (this app's **🗑️ Delete
+selected**); some systems also run a periodic clean-up job.
 
 **Stale memories.** "Plans to travel to Reykjavik" is true in March and stale by September. Plain
 facts have no expiry date. Production systems add timestamps (this app's store records `created_at`
@@ -881,6 +983,8 @@ scores are distances (section 10).
 | Calls `mem0.Memory` directly | Own engine following mem0's algorithm and prompts (tabs ①–⑥); real mem0 in tab ⑦ | To show every intermediate step. See [ADR 0001](adr/0001-own-memory-engine.md). |
 | `gpt-4o-mini` + OpenAI embeddings | `qwen2.5:3b` via Ollama by default (gpt-4o-mini optional) + local MiniLM embeddings | Free, runs offline, no key needed. |
 | Chroma vector database in a temp folder | A JSON file per user in `data/stores/` with cosine search | You can open the file and see exactly what's remembered; it survives restarts. |
+| One answer prompt | Book's prompt by default, plus an optional *improved* prompt (memories are about this user, with timestamps) | The book's prompt makes small models hedge; see section 9. |
+| No way to fix a wrong memory by hand in the example (mem0 itself has `memory.delete()`) | 🗑️ Delete selected in tabs ③ and ⑥ | Contradictions from weak reconciliation need a manual override. |
 | Each chat turn sees memories only | Chat tab can also send the conversation history (toggle) | To contrast short-term and long-term memory. |
 | mem0 applies an UPDATE even when the text is unchanged | Skips it, marked *text unchanged* | Same end result, but the history log only records real changes. |
 | Prints results to the terminal | Shows prompts, raw replies, scores, decisions, and a history log | The point of the app. |

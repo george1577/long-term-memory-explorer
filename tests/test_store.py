@@ -62,3 +62,10 @@ def test_demo_user_starts_from_snapshot(tmp_path, monkeypatch, emb):
 
 def test_user_id_is_made_filename_safe():
     assert store_mod.store_path("../evil/x").name == ".._evil_x.json"
+
+
+def test_manual_delete_is_logged_with_its_source(emb):
+    s = MemoryStore("u")
+    a = s.add("Lives in Portland", emb.embed(["Lives in Portland"])[0])
+    s.delete(a.id, "Manual delete")
+    assert s.history[-1].event == "DELETE" and s.history[-1].source == "Manual delete"

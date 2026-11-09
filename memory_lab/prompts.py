@@ -137,6 +137,27 @@ def answer_system_prompt(memories: list[str]) -> str:
 Use this context to provide personalized and relevant responses. If the memories contain relevant information, incorporate it naturally into your response."""
 
 
+def improved_answer_system_prompt(memories: list[tuple[str, str]]) -> str:
+    """A clearer alternative to the book's prompt (not from the book or mem0).
+
+    `memories` is a list of (text, saved_at ISO timestamp). Three changes from the book's prompt:
+    it says the memories are facts about *this* user, it shows when each was saved (oldest first),
+    and it says what to do when two facts conflict. The first change stops small models hedging
+    ("I don't have information about where you live"). The conflict rule helps only a little with
+    qwen2.5:3b; removing the contradiction from the store is the reliable fix.
+    """
+    if not memories:
+        return "You are a helpful AI assistant."
+    ordered = sorted(memories, key=lambda m: m[1])
+    # Date *and* time: memories saved on the same day would otherwise look equally new.
+    memory_context = "\n".join(f"- {text} (saved {saved[:16].replace('T', ' ')})" for text, saved in ordered)
+    return f"""You are a helpful AI assistant. These are facts you remember about the user you are talking to, from previous conversations (oldest first):
+
+{memory_context}
+
+Treat them as true facts about this user. If two facts conflict, trust the most recently saved one. Use them to give personalized answers, and ignore any that are not relevant to the question."""
+
+
 def transcript_system_prompt(conversations: list[list[dict]]) -> str:
     """For comparison only: paste every past conversation in full instead of using memory."""
     blocks = []
