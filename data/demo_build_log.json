@@ -1,0 +1,220 @@
+[
+ {
+  "conversation": 1,
+  "title": "Travel plans",
+  "facts": [
+   "Asked about airlines flying to Reykjavik",
+   "Asked about hotels in Reykjavik",
+   "Asked about rental car companies in Reykjavik"
+  ],
+  "decisions": [
+   {
+    "event": "ADD",
+    "text": "Asked about airlines flying to Reykjavik",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Asked about hotels in Reykjavik",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Asked about rental car companies in Reykjavik",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   }
+  ],
+  "shown_to_model": []
+ },
+ {
+  "conversation": 2,
+  "title": "Health (promised, never given)",
+  "facts": [],
+  "decisions": [],
+  "shown_to_model": []
+ },
+ {
+  "conversation": 3,
+  "title": "Work and location",
+  "facts": [
+   "Specializes in machine learning and natural language processing",
+   "Coding experience of 8 years",
+   "Prefers working on backend systems"
+  ],
+  "decisions": [
+   {
+    "event": "ADD",
+    "text": "Specializes in machine learning and natural language processing",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Coding experience of 8 years",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Prefers working on backend systems",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   }
+  ],
+  "shown_to_model": [
+   {
+    "id": "0",
+    "text": "Asked about hotels in Reykjavik"
+   },
+   {
+    "id": "1",
+    "text": "Asked about rental car companies in Reykjavik"
+   },
+   {
+    "id": "2",
+    "text": "Asked about airlines flying to Reykjavik"
+   }
+  ]
+ },
+ {
+  "conversation": 4,
+  "title": "Hobbies",
+  "facts": [
+   "Favorite author is Isaac Asimov",
+   "Favorite Asimov book is the Foundation series",
+   "Hiking in Marin County",
+   "Learning to play guitar"
+  ],
+  "decisions": [
+   {
+    "event": "ADD",
+    "text": "Favorite author is Isaac Asimov",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Favorite Asimov book is the Foundation series",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Hiking in Marin County",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Learning to play guitar",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   }
+  ],
+  "shown_to_model": [
+   {
+    "id": "0",
+    "text": "Specializes in machine learning and natural language processing"
+   },
+   {
+    "id": "1",
+    "text": "Prefers working on backend systems"
+   },
+   {
+    "id": "2",
+    "text": "Coding experience of 8 years"
+   },
+   {
+    "id": "3",
+    "text": "Asked about airlines flying to Reykjavik"
+   },
+   {
+    "id": "4",
+    "text": "Asked about hotels in Reykjavik"
+   },
+   {
+    "id": "5",
+    "text": "Asked about rental car companies in Reykjavik"
+   }
+  ]
+ },
+ {
+  "conversation": 5,
+  "title": "Space documentaries",
+  "facts": [
+   "Asked about the number of days in a leap year",
+   "Enjoyed space and astronomy documentaries",
+   "Favorite space documentaries are the original Cosmos with Carl Sagan and the newer one with Neil deGrasse Tyson"
+  ],
+  "decisions": [
+   {
+    "event": "ADD",
+    "text": "Asked about the number of days in a leap year",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Enjoyed space and astronomy documentaries",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   },
+   {
+    "event": "ADD",
+    "text": "Favorite space documentaries are the original Cosmos with Carl Sagan and the newer one with Neil deGrasse Tyson",
+    "old_text": null,
+    "applied": true,
+    "note": ""
+   }
+  ],
+  "shown_to_model": [
+   {
+    "id": "0",
+    "text": "Asked about airlines flying to Reykjavik"
+   },
+   {
+    "id": "1",
+    "text": "Coding experience of 8 years"
+   },
+   {
+    "id": "2",
+    "text": "Asked about hotels in Reykjavik"
+   },
+   {
+    "id": "3",
+    "text": "Asked about rental car companies in Reykjavik"
+   },
+   {
+    "id": "4",
+    "text": "Hiking in Marin County"
+   },
+   {
+    "id": "5",
+    "text": "Favorite author is Isaac Asimov"
+   },
+   {
+    "id": "6",
+    "text": "Favorite Asimov book is the Foundation series"
+   },
+   {
+    "id": "7",
+    "text": "Specializes in machine learning and natural language processing"
+   }
+  ]
+ }
+]
